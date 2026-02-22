@@ -69,12 +69,12 @@ def get_session():
     })
     return s
 
+@st.cache_data(ttl=300)
 def fetch_reddit_posts():
-    """Fetch posts from all target subreddits. Falls back to demo data if Reddit API fails."""
+    """Fetch posts from all target subreddits."""
     all_posts = []
     errors = []
 
-    # Try to fetch from Reddit API
     for subreddit in TARGET_SUBREDDITS:
         try:
             url = f"https://www.reddit.com/r/{subreddit}/new.json?limit=30"
@@ -109,74 +109,7 @@ def fetch_reddit_posts():
             errors.append(f"r/{subreddit}: {str(e)[:50]}")
             continue
 
-    # If we got real posts, return them
-    if len(all_posts) > 0:
-        return all_posts, False
-
-    # If Reddit API completely failed, return demo data with fallback flag
-    demo_posts = [
-        {
-            "id": "demo1",
-            "title": "AWS Cost Optimization Strategy for Multi-Region Deployments",
-            "content": "Discussion about FinOps best practices and infrastructure cost reduction strategies...",
-            "author": "CloudArchitect",
-            "subreddit": "aws",
-            "score": 245,
-            "comments": 18,
-            "created_utc": (datetime.now() - timedelta(hours=2)).timestamp(),
-            "url": "/r/aws/comments/demo1",
-            "upvote_ratio": 0.95,
-        },
-        {
-            "id": "demo2",
-            "title": "Kubernetes DevOps: Automating Platform Engineering Workflows",
-            "content": "Best practices for Kubernetes deployment automation and DevOps pipeline optimization...",
-            "author": "K8sEngineer",
-            "subreddit": "kubernetes",
-            "score": 189,
-            "comments": 24,
-            "created_utc": (datetime.now() - timedelta(hours=4)).timestamp(),
-            "url": "/r/kubernetes/comments/demo2",
-            "upvote_ratio": 0.92,
-        },
-        {
-            "id": "demo3",
-            "title": "Cloud Infrastructure Scaling: Automation for Deployment Excellence",
-            "content": "Exploring automated scaling strategies and infrastructure-as-code best practices...",
-            "author": "InfraAutomation",
-            "subreddit": "cloudcomputing",
-            "score": 156,
-            "comments": 12,
-            "created_utc": (datetime.now() - timedelta(hours=6)).timestamp(),
-            "url": "/r/cloudcomputing/comments/demo3",
-            "upvote_ratio": 0.89,
-        },
-        {
-            "id": "demo4",
-            "title": "FinOps Culture: Cost Awareness in Cloud Teams",
-            "content": "How to build cost optimization culture and implement FinOps practices across teams...",
-            "author": "FinOpsLeader",
-            "subreddit": "FinOps",
-            "score": 142,
-            "comments": 31,
-            "created_utc": (datetime.now() - timedelta(hours=8)).timestamp(),
-            "url": "/r/FinOps/comments/demo4",
-            "upvote_ratio": 0.91,
-        },
-        {
-            "id": "demo5",
-            "title": "DevOps Tools for Continuous Deployment and Infrastructure Monitoring",
-            "content": "Review of top DevOps tools for automation, deployment pipelines, and monitoring...",
-            "author": "DevOpsGuru",
-            "subreddit": "devops",
-            "score": 178,
-            "comments": 42,
-            "created_utc": (datetime.now() - timedelta(hours=3)).timestamp(),
-            "url": "/r/devops/comments/demo5",
-            "upvote_ratio": 0.93,
-        },
-    ]
-    return demo_posts, True
+    return all_posts
 
 # =====================================================================
 # RELEVANCE SCORING
@@ -752,13 +685,9 @@ with col1:
 
 # ── Fetch Data ──
 with st.spinner("📡 Fetching Reddit posts..."):
-    all_posts, is_demo = fetch_reddit_posts()
+    all_posts = fetch_reddit_posts()
 
 total_subs_active = len(set(p["subreddit"] for p in all_posts))
-
-# Show warning if using demo data
-if is_demo:
-    st.warning("⚠️ Using demonstration data. Live Reddit API is currently unavailable. Click 'Refresh Data' to retry connecting to Reddit.")
 
 # Debug info (hidden by default)
 if len(all_posts) == 0:
