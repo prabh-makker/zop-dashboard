@@ -69,55 +69,66 @@ def get_session():
     })
     return s
 
-@st.cache_data(ttl=300)
 def fetch_reddit_posts():
-    """Fetch posts from all target subreddits."""
+    """Fetch posts from all target subreddits with retry logic."""
     all_posts = []
     errors = []
     successful_subs = 0
+    max_retries = 3
 
     for subreddit in TARGET_SUBREDDITS:
-        try:
-            url = f"https://www.reddit.com/r/{subreddit}/new.json?limit=30"
-            resp = get_session().get(url, timeout=15)
+        retry_count = 0
+        success = False
 
-            if resp.status_code != 200:
-                errors.append(f"r/{subreddit}: HTTP {resp.status_code}")
-                continue
+        while retry_count < max_retries and not success:
+            try:
+                url = f"https://www.reddit.com/r/{subreddit}/new.json?limit=30"
+                resp = get_session().get(url, timeout=15)
 
-            data = resp.json()
-            sub_posts = 0
-            for item in data.get("data", {}).get("children", []):
-                post = item.get("data", {})
-                if not post.get("id") or not post.get("created_utc"):
-                    continue
-                created = datetime.fromtimestamp(post["created_utc"])
-                if datetime.now() - created > timedelta(days=30):
-                    continue
-                all_posts.append({
-                    "id": post.get("id"),
-                    "title": post.get("title", ""),
-                    "content": post.get("selftext", "")[:300],
-                    "author": post.get("author", "Unknown"),
-                    "subreddit": post.get("subreddit", ""),
-                    "score": post.get("score", 0),
-                    "comments": post.get("num_comments", 0),
-                    "created_utc": post.get("created_utc", 0),
-                    "url": post.get("permalink", ""),
-                    "upvote_ratio": post.get("upvote_ratio", 0),
-                })
-                sub_posts += 1
-            if sub_posts > 0:
-                successful_subs += 1
-            time.sleep(0.3)
-        except Exception as e:
-            errors.append(f"r/{subreddit}: {str(e)[:50]}")
-            continue
+                if resp.status_code != 200:
+                    if retry_count < max_retries - 1:
+                        time.sleep(1)  # Wait before retry
+                        retry_count += 1
+                        continue
+                    else:
+                        errors.append(f"r/{subreddit}: HTTP {resp.status_code}")
+                        break
 
-    # Log errors to stdout for Streamlit Cloud debugging
-    if errors:
-        print(f"DEBUG: Reddit fetch errors: {errors}")
-    print(f"DEBUG: Fetched {len(all_posts)} posts from {successful_subs} subreddits")
+                data = resp.json()
+                sub_posts = 0
+                for item in data.get("data", {}).get("children", []):
+                    post = item.get("data", {})
+                    if not post.get("id") or not post.get("created_utc"):
+                        continue
+                    created = datetime.fromtimestamp(post["created_utc"])
+                    if datetime.now() - created > timedelta(days=30):
+                        continue
+                    all_posts.append({
+                        "id": post.get("id"),
+                        "title": post.get("title", ""),
+                        "content": post.get("selftext", "")[:300],
+                        "author": post.get("author", "Unknown"),
+                        "subreddit": post.get("subreddit", ""),
+                        "score": post.get("score", 0),
+                        "comments": post.get("num_comments", 0),
+                        "created_utc": post.get("created_utc", 0),
+                        "url": post.get("permalink", ""),
+                        "upvote_ratio": post.get("upvote_ratio", 0),
+                    })
+                    sub_posts += 1
+                if sub_posts > 0:
+                    successful_subs += 1
+                success = True
+
+            except Exception as e:
+                if retry_count < max_retries - 1:
+                    time.sleep(1)
+                    retry_count += 1
+                else:
+                    errors.append(f"r/{subreddit}: {str(e)[:50]}")
+                    break
+
+        time.sleep(0.3)
 
     return all_posts
 
