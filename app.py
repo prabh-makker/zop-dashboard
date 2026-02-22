@@ -670,7 +670,7 @@ def saved():
 
     posts_html = ""
     if posts:
-        for post in posts:
+        for post in posts[:6]:
             posts_html += f"""
             <div class="post">
                 <div class="post-header">
