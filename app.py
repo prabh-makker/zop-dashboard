@@ -145,7 +145,7 @@ def fetch_reddit_posts(skip_cache=False):
                     continue
 
                 created = datetime.fromtimestamp(post["created_utc"])
-                if datetime.now() - created > timedelta(days=30):
+                if datetime.now() - created > timedelta(days=7):
                     continue
 
                 all_posts.append({
@@ -475,6 +475,21 @@ def get_base_template(content):
                 }}
             }}
 
+            function copyToClipboard(url) {{
+                navigator.clipboard.writeText(url).then(() => {{
+                    alert('Link copied to clipboard!');
+                }}).catch(err => {{
+                    // Fallback for older browsers
+                    const textarea = document.createElement('textarea');
+                    textarea.value = url;
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textarea);
+                    alert('Link copied to clipboard!');
+                }});
+            }}
+
             initTheme();
         </script>
     </body>
@@ -527,6 +542,7 @@ def feed():
                 <div class="post-content">{post['content']}</div>
                 <div class="post-actions">
                     <a href="{post['url']}" target="_blank" class="btn btn-secondary">🔗 Open Link</a>
+                    <button onclick="copyToClipboard('{post['url']}')" class="btn btn-secondary">📋 Copy Link</button>
                     <a href="/engage/{post['id']}" class="btn btn-primary">✓ Engage</a>
                 </div>
             </div>
@@ -612,6 +628,7 @@ def saved():
                 <div class="post-content">{post['content']}</div>
                 <div class="post-actions">
                     <a href="{post['url']}" target="_blank" class="btn btn-secondary">🔗 Open Link</a>
+                    <button onclick="copyToClipboard('{post['url']}')" class="btn btn-secondary">📋 Copy Link</button>
                     <a href="/unsave/{post['id']}" class="btn btn-primary">🗑️ Unsave</a>
                 </div>
             </div>
