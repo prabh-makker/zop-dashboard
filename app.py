@@ -502,9 +502,10 @@ def get_base_template(content):
                 fetch('/api/refresh')
                     .then(response => response.json())
                     .then(posts => {{
-                        // Build HTML for top 6 posts
+                        // Build HTML for top 6 posts ONLY
                         let html = '';
-                        if (posts.length > 0) {{
+                        if (posts && posts.length > 0) {{
+                            // Show only the 6 posts from API
                             posts.forEach(post => {{
                                 html += `
                                 <div class="post">
@@ -518,30 +519,33 @@ def get_base_template(content):
                                         <span>⬆️ ${{post.score}}</span>
                                         <span>💬 ${{post.comments}}</span>
                                     </div>
-                                    <div class="post-content">${{post.content}}</div>
+                                    <div class="post-content">${{post.content.substring(0, 300)}}</div>
                                     <div class="post-actions">
                                         <a href="${{post.url}}" target="_blank" class="btn btn-secondary">🔗 Open Link</a>
                                         <button onclick="copyToClipboard('${{post.url}}')" class="btn btn-secondary">📋 Copy Link</button>
                                         <a href="/engage/${{post.id}}" class="btn btn-primary">✓ Engage</a>
                                     </div>
-                                </div>
-                                `;
+                                </div>`;
                             }});
                         }} else {{
                             html = '<div class="no-posts"><h2>📭 No Posts Found</h2><p>Try refreshing again later</p></div>';
                         }}
 
-                        // Update container
+                        // REPLACE all content - don't append
                         container.innerHTML = html;
 
                         // Reset button
                         btn.textContent = '🔄 Refresh Posts';
                         btn.disabled = false;
+
+                        // Show success message
+                        alert('✅ Posts refreshed! ' + posts.length + ' new posts loaded');
                     }})
                     .catch(error => {{
                         console.error('Error:', error);
                         btn.textContent = '❌ Error - Try Again';
                         btn.disabled = false;
+                        alert('❌ Error refreshing posts. Please try again.');
                         setTimeout(() => {{
                             btn.textContent = '🔄 Refresh Posts';
                         }}, 2000);
