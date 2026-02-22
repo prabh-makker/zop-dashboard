@@ -114,6 +114,11 @@ def fetch_reddit_posts():
             errors.append(f"r/{subreddit}: {str(e)[:50]}")
             continue
 
+    # Log errors to stdout for Streamlit Cloud debugging
+    if errors:
+        print(f"DEBUG: Reddit fetch errors: {errors}")
+    print(f"DEBUG: Fetched {len(all_posts)} posts from {successful_subs} subreddits")
+
     return all_posts
 
 # =====================================================================
