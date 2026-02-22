@@ -490,6 +490,64 @@ def get_base_template(content):
                 }});
             }}
 
+            function refreshPosts() {{
+                const btn = document.getElementById('refresh-btn');
+                const container = document.getElementById('posts-container');
+
+                // Show loading state
+                btn.textContent = '⏳ Refreshing...';
+                btn.disabled = true;
+
+                // Fetch fresh posts from API
+                fetch('/api/refresh')
+                    .then(response => response.json())
+                    .then(posts => {{
+                        // Build HTML for top 6 posts
+                        let html = '';
+                        if (posts.length > 0) {{
+                            posts.forEach(post => {{
+                                html += `
+                                <div class="post">
+                                    <div class="post-header">
+                                        <div class="post-title">${{post.title}}</div>
+                                        <div class="relevance-badge">💡 ${{post.relevance}}%</div>
+                                    </div>
+                                    <div class="post-meta">
+                                        <span>🔗 r/${{post.subreddit}}</span>
+                                        <span>👤 ${{post.author}}</span>
+                                        <span>⬆️ ${{post.score}}</span>
+                                        <span>💬 ${{post.comments}}</span>
+                                    </div>
+                                    <div class="post-content">${{post.content}}</div>
+                                    <div class="post-actions">
+                                        <a href="${{post.url}}" target="_blank" class="btn btn-secondary">🔗 Open Link</a>
+                                        <button onclick="copyToClipboard('${{post.url}}')" class="btn btn-secondary">📋 Copy Link</button>
+                                        <a href="/engage/${{post.id}}" class="btn btn-primary">✓ Engage</a>
+                                    </div>
+                                </div>
+                                `;
+                            }});
+                        }} else {{
+                            html = '<div class="no-posts"><h2>📭 No Posts Found</h2><p>Try refreshing again later</p></div>';
+                        }}
+
+                        // Update container
+                        container.innerHTML = html;
+
+                        // Reset button
+                        btn.textContent = '🔄 Refresh Posts';
+                        btn.disabled = false;
+                    }})
+                    .catch(error => {{
+                        console.error('Error:', error);
+                        btn.textContent = '❌ Error - Try Again';
+                        btn.disabled = false;
+                        setTimeout(() => {{
+                            btn.textContent = '🔄 Refresh Posts';
+                        }}, 2000);
+                    }});
+            }}
+
             initTheme();
         </script>
     </body>
@@ -526,7 +584,7 @@ def feed():
 
     posts_html = ""
     if posts:
-        for post in posts[:50]:
+        for post in posts[:6]:
             posts_html += f"""
             <div class="post">
                 <div class="post-header">
@@ -585,9 +643,9 @@ def feed():
         </div>
     </div>
 
-    <a href="/feed?refresh=1" class="refresh-btn">🔄 Refresh Posts</a>
+    <button onclick="refreshPosts()" class="refresh-btn" id="refresh-btn">🔄 Refresh Posts</button>
 
-    <div class="posts">
+    <div class="posts" id="posts-container">
         {posts_html}
     </div>
     """
@@ -702,6 +760,30 @@ def api_posts():
         post['relevance'] = get_relevance(post)
     posts.sort(key=lambda x: (-x['relevance'], -x['score']))
     return jsonify(posts[:100])
+
+@app.route('/api/refresh')
+def api_refresh():
+    """API endpoint for instant refresh - returns top 6 posts"""
+    # Clear cache and fetch fresh posts
+    if os.path.exists(CACHE_FILE):
+        try:
+            os.remove(CACHE_FILE)
+        except:
+            pass
+
+    posts = fetch_reddit_posts(skip_cache=True)
+    engaged = load_engaged()
+
+    for post in posts:
+        post['relevance'] = get_relevance(post)
+
+    # Filter out engaged posts
+    posts = [p for p in posts if p['id'] not in engaged]
+    # Sort by relevance then score
+    posts.sort(key=lambda x: (-x['relevance'], -x['score']))
+
+    # Return only top 6
+    return jsonify(posts[:6])
 
 @app.route('/top10')
 def top10():
