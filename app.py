@@ -439,6 +439,11 @@ def get_base_template(content):
                 box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
             }}
 
+            /* Hide posts beyond the 6th one */
+            .post:nth-child(n+7) {{
+                display: none !important;
+            }}
+
             @media (max-width: 768px) {{
                 .header {{ flex-direction: column; text-align: center; }}
                 .header-right {{ margin-top: 15px; }}
@@ -491,8 +496,14 @@ def get_base_template(content):
             }}
 
             function refreshPosts() {{
+                console.log('Refresh button clicked!');
                 const btn = document.getElementById('refresh-btn');
                 const container = document.getElementById('posts-container');
+
+                if (!btn || !container) {{
+                    console.error('Button or container not found');
+                    return;
+                }}
 
                 // Show loading state
                 btn.textContent = '⏳ Refreshing...';
@@ -500,38 +511,51 @@ def get_base_template(content):
 
                 // Fetch fresh posts from API
                 fetch('/api/refresh')
-                    .then(response => response.json())
+                    .then(response => {{
+                        console.log('Response status:', response.status);
+                        if (!response.ok) throw new Error('API error: ' + response.status);
+                        return response.json();
+                    }})
                     .then(posts => {{
-                        // Build HTML for top 6 posts ONLY
+                        console.log('Posts received:', posts.length);
+                        // Build HTML for top 6 posts ONLY - simple string concatenation
                         let html = '';
                         if (posts && posts.length > 0) {{
-                            // Show only the 6 posts from API
-                            posts.forEach(post => {{
-                                html += `
-                                <div class="post">
-                                    <div class="post-header">
-                                        <div class="post-title">${{post.title}}</div>
-                                        <div class="relevance-badge">💡 ${{post.relevance}}%</div>
-                                    </div>
-                                    <div class="post-meta">
-                                        <span>🔗 r/${{post.subreddit}}</span>
-                                        <span>👤 ${{post.author}}</span>
-                                        <span>⬆️ ${{post.score}}</span>
-                                        <span>💬 ${{post.comments}}</span>
-                                    </div>
-                                    <div class="post-content">${{post.content.substring(0, 300)}}</div>
-                                    <div class="post-actions">
-                                        <a href="${{post.url}}" target="_blank" class="btn btn-secondary">🔗 Open Link</a>
-                                        <button onclick="copyToClipboard('${{post.url}}')" class="btn btn-secondary">📋 Copy Link</button>
-                                        <a href="/engage/${{post.id}}" class="btn btn-primary">✓ Engage</a>
-                                    </div>
-                                </div>`;
-                            }});
+                            for (let i = 0; i < posts.length; i++) {{
+                                const post = posts[i];
+                                const title = post.title || '';
+                                const relevance = post.relevance || 0;
+                                const subreddit = post.subreddit || '';
+                                const author = post.author || 'Unknown';
+                                const score = post.score || 0;
+                                const comments = post.comments || 0;
+                                const content = (post.content || '').substring(0, 300);
+                                const url = post.url || '#';
+                                const postId = post.id || '';
+
+                                html += '<div class="post">';
+                                html += '<div class="post-header">';
+                                html += '<div class="post-title">' + title + '</div>';
+                                html += '<div class="relevance-badge">💡 ' + relevance + '%</div>';
+                                html += '</div>';
+                                html += '<div class="post-meta">';
+                                html += '<span>🔗 r/' + subreddit + '</span>';
+                                html += '<span>👤 ' + author + '</span>';
+                                html += '<span>⬆️ ' + score + '</span>';
+                                html += '<span>💬 ' + comments + '</span>';
+                                html += '</div>';
+                                html += '<div class="post-content">' + content + '</div>';
+                                html += '<div class="post-actions">';
+                                html += '<a href="' + url + '" target="_blank" class="btn btn-secondary">🔗 Open Link</a>';
+                                html += '<a href="/engage/' + postId + '" class="btn btn-primary">✓ Engage</a>';
+                                html += '</div>';
+                                html += '</div>';
+                            }}
                         }} else {{
                             html = '<div class="no-posts"><h2>📭 No Posts Found</h2><p>Try refreshing again later</p></div>';
                         }}
 
-                        // REPLACE all content - don't append
+                        // REPLACE all content
                         container.innerHTML = html;
 
                         // Reset button
@@ -543,12 +567,16 @@ def get_base_template(content):
                     }})
                     .catch(error => {{
                         console.error('Error:', error);
-                        btn.textContent = '❌ Error - Try Again';
+                        btn.textContent = '❌ Error';
                         btn.disabled = false;
-                        alert('❌ Error refreshing posts. Please try again.');
+
+                        // Show visible error on page
+                        const errorHtml = '<div class="no-posts" style="color: red;"><h2>❌ Error Refreshing Posts</h2><p>' + error.message + '</p><p>Check browser console for details</p></div>';
+                        container.innerHTML = errorHtml;
+
                         setTimeout(() => {{
                             btn.textContent = '🔄 Refresh Posts';
-                        }}, 2000);
+                        }}, 3000);
                     }});
             }}
 
@@ -630,7 +658,7 @@ def feed():
 
     <div class="stats">
         <div class="stat">
-            <div class="stat-value">{len(posts)}</div>
+            <div class="stat-value">6</div>
             <div class="stat-label">Posts Available</div>
         </div>
         <div class="stat">
