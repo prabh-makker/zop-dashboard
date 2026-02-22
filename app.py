@@ -9,6 +9,19 @@ import requests
 import json
 from datetime import datetime, timedelta
 import os
+import sys
+
+# Try to import reddit_bot backend
+try:
+    # Add reddit_bot to path if not already there
+    reddit_bot_path = os.path.join(os.path.dirname(__file__), 'reddit_bot')
+    if os.path.exists(reddit_bot_path) and reddit_bot_path not in sys.path:
+        sys.path.insert(0, reddit_bot_path)
+    from services.dashboard_service import DashboardService
+    REDDIT_BOT_AVAILABLE = True
+except Exception as e:
+    REDDIT_BOT_AVAILABLE = False
+    print(f"[INFO] reddit_bot not available: {e}")
 
 app = Flask(__name__)
 
@@ -73,170 +86,49 @@ def save_cache(posts):
     except:
         pass
 
-def get_demo_posts():
-    """Return sample posts for development/testing when Reddit API unavailable"""
-    now = datetime.now()
-    base_time = now - timedelta(days=2)
+def fetch_reddit_posts(skip_cache=False):
+    """Fetch REAL posts from Reddit using reddit_bot backend or public API"""
+    # Check cache first (unless skip_cache is True)
+    if not skip_cache:
+        cached = load_cache()
+        if cached:
+            return cached
 
-    demo_posts = [
-        {
-            "id": "demo1",
-            "title": "How we optimized AWS costs by 45% using FinOps practices",
-            "content": "In our Kubernetes cluster, we implemented cloud resource optimization through DevOps automation. Our infrastructure cost reduction came from analyzing AWS spending patterns and implementing deployment strategies.",
-            "author": "finops_expert",
-            "subreddit": "aws",
-            "score": 2847,
-            "comments": 156,
-            "created_utc": int(base_time.timestamp()),
-            "url": "https://reddit.com/r/aws/comments/demo1",
-            "upvote_ratio": 0.95,
-        },
-        {
-            "id": "demo2",
-            "title": "DevOps automation at scale: Kubernetes deployment pipeline",
-            "content": "We scaled our platform engineering team by implementing Infrastructure automation through Kubernetes. Our deployment process now handles cloud scaling automatically using platform engineering best practices.",
-            "author": "devops_lead",
-            "subreddit": "devops",
-            "score": 1923,
-            "comments": 89,
-            "created_utc": int((base_time + timedelta(hours=2)).timestamp()),
-            "url": "https://reddit.com/r/devops/comments/demo2",
-            "upvote_ratio": 0.92,
-        },
-        {
-            "id": "demo3",
-            "title": "Cost optimization in cloud infrastructure using FinOps",
-            "content": "FinOps is transforming how we manage cloud costs. Through proper cloud infrastructure planning and AWS cost analysis, teams can achieve significant savings in their deployment strategy.",
-            "author": "cloud_architect",
-            "subreddit": "cloudcomputing",
-            "score": 1654,
-            "comments": 123,
-            "created_utc": int((base_time + timedelta(hours=4)).timestamp()),
-            "url": "https://reddit.com/r/cloudcomputing/comments/demo3",
-            "upvote_ratio": 0.90,
-        },
-        {
-            "id": "demo4",
-            "title": "Kubernetes platform engineering: Automating deployments",
-            "content": "Our automation framework for Kubernetes deployments reduced deployment time by 70%. Platform engineering practices combined with infrastructure as code enable rapid scaling and cost optimization.",
-            "author": "platform_eng",
-            "subreddit": "kubernetes",
-            "score": 2156,
-            "comments": 145,
-            "created_utc": int((base_time + timedelta(hours=6)).timestamp()),
-            "url": "https://reddit.com/r/kubernetes/comments/demo4",
-            "upvote_ratio": 0.93,
-        },
-        {
-            "id": "demo5",
-            "title": "Infrastructure automation: DevOps tools comparison",
-            "content": "Comparing Kubernetes, Docker, and cloud platform solutions for infrastructure automation. DevOps automation reduces manual deployment tasks and improves scaling capabilities.",
-            "author": "devops_tester",
-            "subreddit": "devops",
-            "score": 1432,
-            "comments": 98,
-            "created_utc": int((base_time + timedelta(hours=8)).timestamp()),
-            "url": "https://reddit.com/r/devops/comments/demo5",
-            "upvote_ratio": 0.88,
-        },
-        {
-            "id": "demo6",
-            "title": "AWS optimization patterns for FinOps teams",
-            "content": "Implementing FinOps practices on AWS requires understanding cost drivers. Our team saved millions through infrastructure optimization and cloud resource planning.",
-            "author": "aws_specialist",
-            "subreddit": "aws",
-            "score": 1876,
-            "comments": 112,
-            "created_utc": int((base_time + timedelta(hours=10)).timestamp()),
-            "url": "https://reddit.com/r/aws/comments/demo6",
-            "upvote_ratio": 0.91,
-        },
-        {
-            "id": "demo7",
-            "title": "Scaling microservices: Kubernetes and cloud deployment",
-            "content": "Microservices architecture on Kubernetes enables automatic scaling. Our platform engineering approach uses cloud-native deployment patterns for optimal resource utilization.",
-            "author": "k8s_master",
-            "subreddit": "kubernetes",
-            "score": 1645,
-            "comments": 134,
-            "created_utc": int((base_time + timedelta(hours=12)).timestamp()),
-            "url": "https://reddit.com/r/kubernetes/comments/demo7",
-            "upvote_ratio": 0.89,
-        },
-        {
-            "id": "demo8",
-            "title": "Cloud infrastructure cost reduction through automation",
-            "content": "Automation is key to infrastructure cost reduction. Using DevOps and FinOps principles, we automated our deployment process and reduced cloud spending significantly.",
-            "author": "infra_manager",
-            "subreddit": "cloudcomputing",
-            "score": 1523,
-            "comments": 87,
-            "created_utc": int((base_time + timedelta(hours=14)).timestamp()),
-            "url": "https://reddit.com/r/cloudcomputing/comments/demo8",
-            "upvote_ratio": 0.87,
-        },
-        {
-            "id": "demo9",
-            "title": "FinOps and cost optimization: Real-world case study",
-            "content": "Our FinOps journey: implementing cost optimization across AWS and Kubernetes infrastructure. DevOps automation helps enforce cost governance in cloud deployments.",
-            "author": "finops_practitioner",
-            "subreddit": "FinOps",
-            "score": 1734,
-            "comments": 156,
-            "created_utc": int((base_time + timedelta(hours=16)).timestamp()),
-            "url": "https://reddit.com/r/FinOps/comments/demo9",
-            "upvote_ratio": 0.92,
-        },
-        {
-            "id": "demo10",
-            "title": "Platform engineering best practices for cloud deployment",
-            "content": "Platform engineering enables teams to deploy applications efficiently. Using Kubernetes, we built an internal developer platform that automates deployment and reduces infrastructure overhead.",
-            "author": "platform_builder",
-            "subreddit": "devops",
-            "score": 1891,
-            "comments": 167,
-            "created_utc": int((base_time + timedelta(hours=18)).timestamp()),
-            "url": "https://reddit.com/r/devops/comments/demo10",
-            "upvote_ratio": 0.94,
-        },
-        {
-            "id": "demo11",
-            "title": "Scaling AWS infrastructure with cost optimization",
-            "content": "Scaling on AWS requires careful cost planning. Our infrastructure scaling strategy combines automation with cost governance to maintain efficiency.",
-            "author": "aws_scaler",
-            "subreddit": "aws",
-            "score": 1567,
-            "comments": 95,
-            "created_utc": int((base_time + timedelta(hours=20)).timestamp()),
-            "url": "https://reddit.com/r/aws/comments/demo11",
-            "upvote_ratio": 0.90,
-        },
-        {
-            "id": "demo12",
-            "title": "Kubernetes deployment strategies and platform engineering",
-            "content": "Our Kubernetes platform enables seamless deployment across infrastructure. Platform engineering automation reduces deployment time and improves cloud resource utilization.",
-            "author": "k8s_deployer",
-            "subreddit": "kubernetes",
-            "score": 1432,
-            "comments": 102,
-            "created_utc": int((base_time + timedelta(hours=22)).timestamp()),
-            "url": "https://reddit.com/r/kubernetes/comments/demo12",
-            "upvote_ratio": 0.88,
-        },
-    ]
-
-    return demo_posts
-
-def fetch_reddit_posts():
-    """Fetch REAL posts from Reddit, or demo posts if Reddit unavailable"""
-    # Check cache first
-    cached = load_cache()
-    if cached:
-        return cached
-
-    # Try to fetch from Reddit
     all_posts = []
 
+    # Try to use reddit_bot backend first
+    if REDDIT_BOT_AVAILABLE:
+        try:
+            print("[INFO] Attempting to fetch posts from reddit_bot backend...")
+            service = DashboardService()
+            dashboard_posts = service.get_all_posts(track="zopnight", force_refresh=True)
+
+            # Convert DashboardPost objects to Flask format
+            for post in dashboard_posts:
+                all_posts.append({
+                    "id": post.post_id,
+                    "title": post.title,
+                    "content": "",  # reddit_bot doesn't provide content in DashboardPost
+                    "author": "Unknown",  # reddit_bot doesn't provide author in DashboardPost
+                    "subreddit": post.subreddit,
+                    "score": post.score,
+                    "comments": post.num_comments,
+                    "created_utc": post.created_utc,
+                    "url": post.url,
+                    "upvote_ratio": post.upvote_ratio,
+                })
+
+            if all_posts:
+                print(f"[INFO] Successfully fetched {len(all_posts)} posts from reddit_bot backend")
+                save_cache(all_posts)
+                return all_posts
+            else:
+                print("[INFO] reddit_bot returned no posts, falling back to public API...")
+        except Exception as e:
+            print(f"[INFO] reddit_bot backend failed: {e}, falling back to public API...")
+
+    # Fall back to public Reddit API
+    print("[INFO] Fetching posts from public Reddit API...")
     for subreddit in TARGET_SUBREDDITS:
         try:
             url = f"https://www.reddit.com/r/{subreddit}/new.json?limit=30"
@@ -271,11 +163,7 @@ def fetch_reddit_posts():
             print(f"Error fetching r/{subreddit}: {e}")
             continue
 
-    # If no posts fetched from Reddit, use demo data for testing
-    if not all_posts:
-        print("[INFO] Reddit API unreachable - using demo data for UI testing")
-        all_posts = get_demo_posts()
-
+    # Return fetched posts (no demo fallback - user wants real data only)
     # Cache the posts before returning
     save_cache(all_posts)
     return all_posts
@@ -599,7 +487,17 @@ def index():
 @app.route('/feed')
 def feed():
     """Main feed page"""
-    posts = fetch_reddit_posts()
+    # Check if refresh button was clicked
+    refresh = request.args.get('refresh') == '1'
+
+    # Clear cache if refresh requested
+    if refresh and os.path.exists(CACHE_FILE):
+        try:
+            os.remove(CACHE_FILE)
+        except:
+            pass
+
+    posts = fetch_reddit_posts(skip_cache=refresh)
     engaged = load_engaged()
 
     for post in posts:
@@ -670,7 +568,7 @@ def feed():
         </div>
     </div>
 
-    <a href="/feed" class="refresh-btn">🔄 Refresh Posts</a>
+    <a href="/feed?refresh=1" class="refresh-btn">🔄 Refresh Posts</a>
 
     <div class="posts">
         {posts_html}
