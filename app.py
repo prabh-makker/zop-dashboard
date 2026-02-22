@@ -12,13 +12,14 @@ import os
 import sys
 
 # Try to import reddit_bot backend
+REDDIT_BOT_AVAILABLE = False
 try:
-    # Add reddit_bot to path if not already there
+    # Add reddit_bot to path
     reddit_bot_path = os.path.join(os.path.dirname(__file__), 'reddit_bot')
-    if os.path.exists(reddit_bot_path) and reddit_bot_path not in sys.path:
-        sys.path.insert(0, reddit_bot_path)
+    sys.path.insert(0, reddit_bot_path)
     from services.dashboard_service import DashboardService
     REDDIT_BOT_AVAILABLE = True
+    print("[INFO] reddit_bot backend available")
 except Exception as e:
     REDDIT_BOT_AVAILABLE = False
     print(f"[INFO] reddit_bot not available: {e}")
