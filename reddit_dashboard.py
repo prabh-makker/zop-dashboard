@@ -70,12 +70,17 @@ def get_session():
 def fetch_reddit_posts():
     """Fetch posts from all target subreddits."""
     all_posts = []
+    errors = []
+
     for subreddit in TARGET_SUBREDDITS:
         try:
             url = f"https://www.reddit.com/r/{subreddit}/new.json?limit=30"
-            resp = get_session().get(url, timeout=10)
+            resp = get_session().get(url, timeout=15)
+
             if resp.status_code != 200:
+                errors.append(f"r/{subreddit}: HTTP {resp.status_code}")
                 continue
+
             data = resp.json()
             for item in data.get("data", {}).get("children", []):
                 post = item.get("data", {})
@@ -97,8 +102,10 @@ def fetch_reddit_posts():
                     "upvote_ratio": post.get("upvote_ratio", 0),
                 })
             time.sleep(0.3)
-        except Exception:
+        except Exception as e:
+            errors.append(f"r/{subreddit}: {str(e)[:50]}")
             continue
+
     return all_posts
 
 # =====================================================================
@@ -667,10 +674,15 @@ st.markdown("""
 # =====================================================================
 
 # ── Fetch Data ──
-with st.spinner(""):
+with st.spinner("📡 Fetching Reddit posts..."):
     all_posts = fetch_reddit_posts()
 
 total_subs_active = len(set(p["subreddit"] for p in all_posts))
+
+# Debug info (hidden by default)
+if len(all_posts) == 0:
+    st.error("⚠️ No posts fetched! This might be a network issue. Try clicking 'Refresh Data'.")
+    st.info("📝 Debug: If this persists, check Streamlit Cloud logs or Reddit API status.")
 
 # ── Hero Header ──
 st.markdown(f"""
