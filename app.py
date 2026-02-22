@@ -212,7 +212,7 @@ def fetch_reddit_posts():
     for subreddit in TARGET_SUBREDDITS:
         try:
             url = f"https://www.reddit.com/r/{subreddit}/new.json?limit=30"
-            resp = get_session().get(url, timeout=15)
+            resp = get_session().get(url, timeout=3)
 
             if resp.status_code != 200:
                 continue
@@ -652,14 +652,18 @@ def feed():
 @app.route('/saved')
 def saved():
     """Saved posts page"""
-    posts = fetch_reddit_posts()
+    # Load engaged posts first to filter early
     engaged = load_engaged()
 
-    for post in posts:
-        post['relevance'] = get_relevance(post)
-
-    posts = [p for p in posts if p['id'] in engaged]
-    posts.sort(key=lambda x: (-x['relevance'], -x['score']))
+    if not engaged:
+        # No saved posts yet - return empty state quickly
+        posts = []
+    else:
+        posts = fetch_reddit_posts()
+        for post in posts:
+            post['relevance'] = get_relevance(post)
+        posts = [p for p in posts if p['id'] in engaged]
+        posts.sort(key=lambda x: (-x['relevance'], -x['score']))
 
     posts_html = ""
     if posts:
