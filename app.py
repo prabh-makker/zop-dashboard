@@ -25,6 +25,8 @@ ZOP_KEYWORDS = [
 ]
 
 ENGAGED_FILE = "engaged_history.json"
+CACHE_FILE = "posts_cache.json"
+CACHE_TIMEOUT = 300  # 5 minutes
 
 # Session with proper User-Agent
 def get_session():
@@ -49,6 +51,27 @@ def save_engaged(engaged_set):
     """Save engaged posts to JSON"""
     with open(ENGAGED_FILE, 'w') as f:
         json.dump({"engaged_posts": list(engaged_set)}, f)
+
+def load_cache():
+    """Load cached posts if available and not expired"""
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, 'r') as f:
+                data = json.load(f)
+                cached_time = datetime.fromisoformat(data.get("timestamp", ""))
+                if datetime.now() - cached_time < timedelta(seconds=CACHE_TIMEOUT):
+                    return data.get("posts", [])
+        except:
+            pass
+    return None
+
+def save_cache(posts):
+    """Save posts to cache"""
+    try:
+        with open(CACHE_FILE, 'w') as f:
+            json.dump({"posts": posts, "timestamp": datetime.now().isoformat()}, f)
+    except:
+        pass
 
 def get_demo_posts():
     """Return sample posts for development/testing when Reddit API unavailable"""
@@ -206,7 +229,12 @@ def get_demo_posts():
 
 def fetch_reddit_posts():
     """Fetch REAL posts from Reddit, or demo posts if Reddit unavailable"""
-    # Try to fetch from Reddit first
+    # Check cache first
+    cached = load_cache()
+    if cached:
+        return cached
+
+    # Try to fetch from Reddit
     all_posts = []
 
     for subreddit in TARGET_SUBREDDITS:
@@ -248,6 +276,8 @@ def fetch_reddit_posts():
         print("[INFO] Reddit API unreachable - using demo data for UI testing")
         all_posts = get_demo_posts()
 
+    # Cache the posts before returning
+    save_cache(all_posts)
     return all_posts
 
 def get_relevance(post):
