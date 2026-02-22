@@ -740,7 +740,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =====================================================================
-# MAIN UI
+# MAIN UI - Intelligent Fallback System Active
 # =====================================================================
 
 # ── Refresh Button ──
