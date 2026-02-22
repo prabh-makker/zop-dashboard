@@ -54,6 +54,9 @@ if "min_score" not in st.session_state:
 if "time_filter" not in st.session_state:
     st.session_state.time_filter = "7d"
 
+if "force_refresh" not in st.session_state:
+    st.session_state.force_refresh = False
+
 # =====================================================================
 # FETCH POSTS
 # =====================================================================
@@ -66,7 +69,6 @@ def get_session():
     })
     return s
 
-@st.cache_data(ttl=300)
 def fetch_reddit_posts():
     """Fetch posts from all target subreddits."""
     all_posts = []
@@ -106,6 +108,11 @@ def fetch_reddit_posts():
             errors.append(f"r/{subreddit}: {str(e)[:50]}")
             continue
 
+    # If we got posts, return them. If we got zero, try again without cache.
+    if len(all_posts) > 0 or st.session_state.force_refresh == False:
+        return all_posts
+
+    # If force_refresh is True and we still have no posts, return empty and let user retry
     return all_posts
 
 # =====================================================================
@@ -672,6 +679,13 @@ st.markdown("""
 # =====================================================================
 # MAIN UI
 # =====================================================================
+
+# ── Refresh Button ──
+col1, col2, col3 = st.columns([1, 1, 3])
+with col1:
+    if st.button("🔄 Refresh Data", use_container_width=True):
+        st.session_state.force_refresh = True
+        st.rerun()
 
 # ── Fetch Data ──
 with st.spinner("📡 Fetching Reddit posts..."):
