@@ -10,6 +10,7 @@ import json
 from datetime import datetime, timedelta
 import os
 import sys
+import random
 
 # Try to import reddit_bot backend
 REDDIT_BOT_AVAILABLE = False
@@ -795,27 +796,36 @@ def api_posts():
 
 @app.route('/api/refresh')
 def api_refresh():
-    """API endpoint for instant refresh - returns top 6 posts"""
-    # Clear cache and fetch fresh posts
-    if os.path.exists(CACHE_FILE):
-        try:
-            os.remove(CACHE_FILE)
-        except:
-            pass
+    """API endpoint for instant refresh - returns random selection of posts"""
+    try:
+        # Fetch fresh posts (skip cache to get new data from network)
+        # If network unavailable, will use cached data
+        posts = fetch_reddit_posts(skip_cache=True)
 
-    posts = fetch_reddit_posts(skip_cache=True)
-    engaged = load_engaged()
+        # If no posts from fresh fetch, try cached
+        if not posts:
+            posts = fetch_reddit_posts(skip_cache=False)
+        engaged = load_engaged()
 
-    for post in posts:
-        post['relevance'] = get_relevance(post)
+        for post in posts:
+            post['relevance'] = get_relevance(post)
 
-    # Filter out engaged posts
-    posts = [p for p in posts if p['id'] not in engaged]
-    # Sort by relevance then score
-    posts.sort(key=lambda x: (-x['relevance'], -x['score']))
+        # Filter out engaged posts
+        posts = [p for p in posts if p['id'] not in engaged]
+        # Sort by relevance then score
+        posts.sort(key=lambda x: (-x['relevance'], -x['score']))
 
-    # Return only top 6
-    return jsonify(posts[:6])
+        # Randomize post selection to show different posts each refresh
+        # This gives users "other top 6" on each refresh instead of always the same 6
+        random.shuffle(posts)
+
+        # Return shuffled top 6 posts
+        return jsonify(posts[:6])
+    except Exception as e:
+        print(f"[ERROR] in api_refresh: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)})
 
 @app.route('/top10')
 def top10():
