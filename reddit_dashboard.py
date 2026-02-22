@@ -66,21 +66,11 @@ def get_session():
     })
     return s
 
-def get_demo_posts():
-    """Return demo posts for testing when Reddit API is unreachable."""
-    now = datetime.now()
-    return [
-        {"id":"1","title":"AWS cost optimization strategies","content":"Tips for reducing AWS spending using reserved instances and spot instances...","author":"CloudEngineer","subreddit":"aws","score":245,"comments":32,"created_utc":(now - timedelta(hours=2)).timestamp(),"url":"/r/aws/comments/abc123","upvote_ratio":0.92},
-        {"id":"2","title":"Kubernetes scaling best practices","content":"How to properly configure HPA and VPA for automatic scaling in production...","author":"DevOpsGuy","subreddit":"kubernetes","score":189,"comments":28,"created_utc":(now - timedelta(hours=4)).timestamp(),"url":"/r/kubernetes/comments/def456","upvote_ratio":0.88},
-        {"id":"3","title":"FinOps framework implementation","content":"Step-by-step guide to implementing FinOps in your cloud infrastructure...","author":"CostOptimizer","subreddit":"FinOps","score":156,"comments":21,"created_utc":(now - timedelta(hours=6)).timestamp(),"url":"/r/FinOps/comments/ghi789","upvote_ratio":0.85},
-        {"id":"4","title":"DevOps automation with Terraform","content":"Infrastructure as code best practices and automation workflows...","author":"IACExpert","subreddit":"devops","score":203,"comments":45,"created_utc":(now - timedelta(hours=8)).timestamp(),"url":"/r/devops/comments/jkl012","upvote_ratio":0.90},
-        {"id":"5","title":"Cloud security posture management","content":"Evaluating and improving your cloud infrastructure security...","author":"SecOps","subreddit":"Cloud","score":167,"comments":34,"created_utc":(now - timedelta(hours=10)).timestamp(),"url":"/r/Cloud/comments/mno345","upvote_ratio":0.87},
-    ]
-
 @st.cache_data(ttl=300)
 def fetch_reddit_posts():
     """Fetch posts from all target subreddits."""
     all_posts = []
+    errors = []
 
     for subreddit in TARGET_SUBREDDITS:
         try:
@@ -88,6 +78,7 @@ def fetch_reddit_posts():
             resp = get_session().get(url, timeout=15)
 
             if resp.status_code != 200:
+                errors.append(f"r/{subreddit}: HTTP {resp.status_code}")
                 continue
 
             data = resp.json()
@@ -111,12 +102,9 @@ def fetch_reddit_posts():
                     "upvote_ratio": post.get("upvote_ratio", 0),
                 })
             time.sleep(0.3)
-        except Exception:
+        except Exception as e:
+            errors.append(f"r/{subreddit}: {str(e)[:50]}")
             continue
-
-    # If no posts fetched, return demo data
-    if not all_posts:
-        all_posts = get_demo_posts()
 
     return all_posts
 
