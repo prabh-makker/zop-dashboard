@@ -1,0 +1,93 @@
+{
+  "zop_profile": {
+    "company": "Zop.dev",
+    "products": [
+      "ZopDay",
+      "ZopNight"
+    ],
+    "descriptions": {
+      "ZopDay": "Internal Developer Platform (IDP) for rapid infrastructure provisioning",
+      "ZopNight": "FinOps tool for scheduling cloud resource sleep/wake cycles to save costs"
+    },
+    "keywords": {
+      "primary": [
+        "FinOps",
+        "AWS cost",
+        "cloud optimization",
+        "infrastructure automation",
+        "Kubernetes orchestration",
+        "platform engineering",
+        "cloud governance",
+        "resource scheduling",
+        "cost optimization",
+        "cloud infrastructure",
+        "infrastructure as code",
+        "DevOps",
+        "cloud cost management"
+      ],
+      "secondary": [
+        "cloud",
+        "infrastructure",
+        "deployment",
+        "automation",
+        "scheduling",
+        "resource management",
+        "cost",
+        "optimization",
+        "Kubernetes",
+        "AWS",
+        "cloud computing",
+        "platform",
+        "developer tools"
+      ]
+    }
+  },
+  "target_subreddits": [
+    "aspirebudgeting",
+    "aws",
+    "AWS_cloud",
+    "AZURE",
+    "books",
+    "booksuggestions",
+    "Cloud",
+    "CloudArchitect",
+    "cloudcomputing",
+    "cloudcostoptimization",
+    "cloudgovernance",
+    "CloudResearchConnect",
+    "CLOUDS",
+    "cloudstorage",
+    "CrealityCloud",
+    "devops",
+    "FinOps",
+    "fintech",
+    "googlecloud",
+    "Heroku",
+    "IDP",
+    "kubernetes",
+    "Kubuntu",
+    "literature",
+    "ManagedITSolutions",
+    "marketingcloud",
+    "movies",
+    "optimization",
+    "SaaS",
+    "SelfHosting",
+    "startup",
+    "suggestmeabook",
+    "sysadmin",
+    "Terraform"
+  ],
+  "settings": {
+    "cache_duration_minutes": 30,
+    "post_freshness_days": 7,
+    "request_timeout_seconds": 10,
+    "request_delay_seconds": 0.5,
+    "relevance_score": {
+      "primary_keyword_weight": 10,
+      "secondary_keyword_weight": 3,
+      "product_mention_bonus": 15,
+      "max_score": 100
+    }
+  }
+}

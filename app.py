@@ -27,6 +27,35 @@ except Exception as e:
 
 app = Flask(__name__)
 
+# Use absolute paths for data files
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def migrate_old_saved_posts():
+    """Migrate old engaged_history.json to new saved_posts.json format"""
+    old_file = "engaged_history.json"
+    if os.path.exists(old_file) and not os.path.exists(SAVED_POSTS_FILE):
+        try:
+            with open(old_file, 'r') as f:
+                old_data = json.load(f)
+                engaged_ids = set(old_data.get("engaged_posts", []))
+
+            if engaged_ids:
+                print(f"[INFO] Migrating {len(engaged_ids)} saved posts...")
+                # Fetch posts and find matching ones
+                all_posts = fetch_reddit_posts()
+                saved_posts = []
+                for post in all_posts:
+                    if post['id'] in engaged_ids:
+                        post['relevance'] = get_relevance(post)
+                        saved_posts.append(post)
+
+                if saved_posts:
+                    with open(SAVED_POSTS_FILE, 'w') as f:
+                        json.dump({"saved_posts": saved_posts}, f)
+                    print(f"[INFO] Successfully migrated {len(saved_posts)} posts")
+        except Exception as e:
+            print(f"[WARNING] Migration failed: {e}")
+
 # Configuration
 TARGET_SUBREDDITS = [
     "aws", "devops", "kubernetes", "cloudcomputing", "FinOps",
@@ -39,8 +68,8 @@ ZOP_KEYWORDS = [
     "automation", "deployment", "scaling"
 ]
 
-ENGAGED_FILE = "engaged_history.json"
-CACHE_FILE = "posts_cache.json"
+SAVED_POSTS_FILE = os.path.join(APP_DIR, "saved_posts.json")
+CACHE_FILE = os.path.join(APP_DIR, "posts_cache.json")
 CACHE_TIMEOUT = 300  # 5 minutes
 
 # Session with proper User-Agent
@@ -51,21 +80,37 @@ def get_session():
     })
     return s
 
-def load_engaged():
-    """Load engaged posts from JSON"""
-    if os.path.exists(ENGAGED_FILE):
+def load_saved_posts():
+    """Load saved posts with full data from JSON"""
+    if os.path.exists(SAVED_POSTS_FILE):
         try:
-            with open(ENGAGED_FILE, 'r') as f:
+            with open(SAVED_POSTS_FILE, 'r') as f:
                 data = json.load(f)
-                return set(data.get("engaged_posts", []))
+                return data.get("saved_posts", [])
         except:
-            return set()
-    return set()
+            return []
+    return []
 
-def save_engaged(engaged_set):
-    """Save engaged posts to JSON"""
-    with open(ENGAGED_FILE, 'w') as f:
-        json.dump({"engaged_posts": list(engaged_set)}, f)
+def save_post_data(post):
+    """Save a full post to saved posts file"""
+    saved = load_saved_posts()
+    # Check if post already saved
+    if not any(p['id'] == post['id'] for p in saved):
+        saved.append(post)
+    with open(SAVED_POSTS_FILE, 'w') as f:
+        json.dump({"saved_posts": saved}, f)
+
+def remove_saved_post(post_id):
+    """Remove a post from saved posts"""
+    saved = load_saved_posts()
+    saved = [p for p in saved if p['id'] != post_id]
+    with open(SAVED_POSTS_FILE, 'w') as f:
+        json.dump({"saved_posts": saved}, f)
+
+def get_saved_post_ids():
+    """Get set of saved post IDs for filtering feed"""
+    saved = load_saved_posts()
+    return set(p['id'] for p in saved)
 
 def load_cache():
     """Load cached posts if available and not expired"""
@@ -605,15 +650,17 @@ def feed():
             pass
 
     posts = fetch_reddit_posts(skip_cache=refresh)
-    engaged = load_engaged()
+    saved_ids = get_saved_post_ids()
 
     for post in posts:
         post['relevance'] = get_relevance(post)
 
-    posts = [p for p in posts if p['id'] not in engaged]
+    posts = [p for p in posts if p['id'] not in saved_ids]
     posts.sort(key=lambda x: (-x['relevance'], -x['score']))
 
     high_relevance = sum(1 for p in posts if p['relevance'] >= 80)
+    saved_posts = load_saved_posts()
+    print(f"[DEBUG] feed() loaded {len(saved_posts)} saved posts", flush=True)
 
     posts_html = ""
     if posts:
@@ -654,7 +701,7 @@ def feed():
 
     <div class="nav-tabs">
         <button class="nav-tab active">📰 Feed</button>
-        <a href="/saved" class="nav-tab">📌 Saved Posts ({len(engaged)})</a>
+        <a href="/saved" class="nav-tab">📌 Saved Posts ({len(saved_posts)})</a>
     </div>
 
     <div class="stats">
@@ -688,18 +735,16 @@ def feed():
 @app.route('/saved')
 def saved():
     """Saved posts page"""
-    # Load engaged posts first to filter early
-    engaged = load_engaged()
+    # Load saved posts with full data
+    posts = load_saved_posts()
 
-    if not engaged:
-        # No saved posts yet - return empty state quickly
-        posts = []
-    else:
-        posts = fetch_reddit_posts()
-        for post in posts:
+    # Add relevance scores if not already present
+    for post in posts:
+        if 'relevance' not in post:
             post['relevance'] = get_relevance(post)
-        posts = [p for p in posts if p['id'] in engaged]
-        posts.sort(key=lambda x: (-x['relevance'], -x['score']))
+
+    # Sort by relevance then score
+    posts.sort(key=lambda x: (-x.get('relevance', 0), -x.get('score', 0)))
 
     posts_html = ""
     if posts:
@@ -771,18 +816,23 @@ def saved():
 
 @app.route('/engage/<post_id>')
 def engage(post_id):
-    """Mark post as engaged"""
-    engaged = load_engaged()
-    engaged.add(post_id)
-    save_engaged(engaged)
+    """Save post with full data"""
+    # Fetch all posts and find the one to save
+    posts = fetch_reddit_posts()
+    for post in posts:
+        post['relevance'] = get_relevance(post)
+
+    # Find the post to save
+    target_post = next((p for p in posts if p['id'] == post_id), None)
+    if target_post:
+        save_post_data(target_post)
+
     return redirect(url_for('feed'))
 
 @app.route('/unsave/<post_id>')
 def unsave(post_id):
     """Remove post from saved"""
-    engaged = load_engaged()
-    engaged.discard(post_id)
-    save_engaged(engaged)
+    remove_saved_post(post_id)
     return redirect(url_for('saved'))
 
 @app.route('/api/posts')
@@ -805,13 +855,13 @@ def api_refresh():
         # If no posts from fresh fetch, try cached
         if not posts:
             posts = fetch_reddit_posts(skip_cache=False)
-        engaged = load_engaged()
+        saved_ids = get_saved_post_ids()
 
         for post in posts:
             post['relevance'] = get_relevance(post)
 
-        # Filter out engaged posts
-        posts = [p for p in posts if p['id'] not in engaged]
+        # Filter out saved posts
+        posts = [p for p in posts if p['id'] not in saved_ids]
         # Sort by relevance then score
         posts.sort(key=lambda x: (-x['relevance'], -x['score']))
 
@@ -980,5 +1030,8 @@ def top10():
     return html
 
 if __name__ == '__main__':
+    # Migrate old saved posts format on startup
+    migrate_old_saved_posts()
+
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port, debug=False)
