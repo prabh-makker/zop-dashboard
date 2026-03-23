@@ -63,9 +63,15 @@ TARGET_SUBREDDITS = [
 ]
 
 ZOP_KEYWORDS = [
+    # Generic Cloud/Infrastructure Keywords
     "FinOps", "AWS", "cost optimization", "infrastructure",
     "cloud", "DevOps", "Kubernetes", "platform engineering",
-    "automation", "deployment", "scaling"
+    "automation", "deployment", "scaling",
+    # ZopDev Product Keywords
+    "ZopDay", "ZopNight", "ZopDev", "Internal Developer Platform",
+    "IDP", "environment management", "multi-cloud", "Google Cloud",
+    "Azure", "resource optimization", "cloud governance", "budgets",
+    "cost governance", "production-ready", "self-serve", "deployment"
 ]
 
 SAVED_POSTS_FILE = os.path.join(APP_DIR, "saved_posts.json")
@@ -111,6 +117,29 @@ def get_saved_post_ids():
     """Get set of saved post IDs for filtering feed"""
     saved = load_saved_posts()
     return set(p['id'] for p in saved)
+
+def load_huginn_history():
+    """Load Huginn fetch history"""
+    huginn_file = os.path.join(APP_DIR, "huginn_history.json")
+    if os.path.exists(huginn_file):
+        try:
+            with open(huginn_file, 'r') as f:
+                return json.load(f).get("fetches", [])
+        except:
+            return []
+    return []
+
+def log_huginn_fetch(post_id, status):
+    """Log a Huginn fetch event"""
+    huginn_file = os.path.join(APP_DIR, "huginn_history.json")
+    history = load_huginn_history()
+    history.append({
+        "post_id": post_id,
+        "timestamp": datetime.now().isoformat(),
+        "status": status
+    })
+    with open(huginn_file, "w") as f:
+        json.dump({"fetches": history[-1000:]}, f)  # Keep last 1000
 
 def load_cache():
     """Load cached posts if available and not expired"""
@@ -216,13 +245,83 @@ def fetch_reddit_posts(skip_cache=False):
     return all_posts
 
 def get_relevance(post):
-    """Score post by ZOP keywords"""
+    """
+    Intelligent scoring system (0-100) for lead quality
+    Components: Keywords (40%) + Intent (35%) + FinOps Pillars (15%) + Engagement (10%)
+    """
     text = (post.get("title", "") + " " + post.get("content", "")).lower()
+    title = post.get("title", "").lower()
+
     score = 0
+    breakdown = {}
+
+    # 1. KEYWORD RELEVANCE (40 points max)
+    keyword_score = 0
     for keyword in ZOP_KEYWORDS:
-        if keyword.lower() in text:
-            score += 20
-    return min(100, score)
+        kw_lower = keyword.lower()
+        if kw_lower in title:
+            keyword_score += 15  # Title match is stronger
+        elif kw_lower in text:
+            keyword_score += 8
+    breakdown['keyword'] = min(keyword_score, 40)
+
+    # 2. FINOPS PILLAR DETECTION (15 points max)
+    pillar_keywords = {
+        'cost_management': ['reduce cost', 'lower bill', 'aws bill', 'cloud cost', 'cost optimization', 'cost tracking', 'budget'],
+        'rate_optimization': ['reserved instance', 'savings plan', 'commitment', 'discount', 'pricing', 'ri'],
+        'workload_optimization': ['right-sizing', 'auto-scaling', 'idle', 'underutilized', 'overprovisioned'],
+        'governance': ['cost allocation', 'chargeback', 'tagging', 'accountability']
+    }
+
+    pillar_score = 0
+    for pillar, keywords in pillar_keywords.items():
+        if any(kw in text for kw in keywords):
+            pillar_score += 15  # Any pillar match = 15 points
+            break  # Only count once
+    breakdown['pillar'] = min(pillar_score, 15)
+
+    # 3. HIGH-INTENT SIGNALS (35 points max)
+    intent_signals = {
+        'cost_pain': (['struggling', 'how to reduce', 'need help', 'help with', 'how do we'], 20),
+        'automation': (['automate', 'scheduling', 'sleep', 'wake', 'automated'], 10),
+        'visibility': (['visibility', 'tracking', 'monitoring', 'dashboard', 'insights'], 10)
+    }
+
+    intent_score = 0
+    for signal_type, (keywords, points) in intent_signals.items():
+        if any(kw in text for kw in keywords):
+            intent_score += points
+    breakdown['intent'] = min(intent_score, 35)
+
+    # 4. ENGAGEMENT BONUS (10 points max)
+    upvotes = post.get("upvotes", 0)
+    comments = post.get("comments", 0)
+    engagement = min((upvotes + comments * 2) / 20, 10)
+    breakdown['engagement'] = int(engagement)
+
+    # Calculate base score
+    score = breakdown['keyword'] + breakdown['pillar'] + breakdown['intent'] + breakdown['engagement']
+
+    # 5. APPLY ANTI-SIGNALS (deprioritize learning/tutorial posts by 40%)
+    anti_signals = ['learning', 'tutorial', 'beginner', 'getting started', 'how to learn',
+                    'educational', 'course', 'certification', 'practice', 'study']
+    if any(signal in text for signal in anti_signals):
+        score = int(score * 0.6)  # Reduce by 40%
+        breakdown['antiSignal'] = True
+
+    # 6. DETERMINE PITCHABILITY
+    if score >= 75:
+        pitchability = 'HIGH'
+    elif score >= 50:
+        pitchability = 'MEDIUM'
+    else:
+        pitchability = 'LOW'
+
+    # Store metadata in post for display
+    post['score_breakdown'] = breakdown
+    post['pitchability'] = pitchability
+
+    return min(max(score, 0), 100)  # Clamp to 0-100
 
 def get_base_template(content):
     """Base HTML template with shared styles and scripts"""
@@ -665,17 +764,39 @@ def feed():
     posts_html = ""
     if posts:
         for post in posts[:6]:
+            relevance = post['relevance']
+            breakdown = post.get('score_breakdown', {})
+            pitchability = post.get('pitchability', 'LOW')
+
+            # Determine badge color and emoji based on pitchability
+            if pitchability == 'HIGH':
+                badge_color = '#10b981'  # Green
+                pitch_emoji = '🎯'
+            elif pitchability == 'MEDIUM':
+                badge_color = '#f59e0b'  # Amber
+                pitch_emoji = '⭐'
+            else:
+                badge_color = '#ef4444'  # Red
+                pitch_emoji = '📌'
+
+            # Build breakdown display
+            breakdown_str = f"Keyword: {breakdown.get('keyword', 0)} | Intent: {breakdown.get('intent', 0)} | Pillar: {breakdown.get('pillar', 0)} | Engagement: {breakdown.get('engagement', 0)}"
+
             posts_html += f"""
             <div class="post">
                 <div class="post-header">
                     <div class="post-title">{post['title']}</div>
-                    <div class="relevance-badge">💡 {post['relevance']}%</div>
+                    <div class="relevance-badge" style="background: {badge_color};">{pitch_emoji} {relevance}%</div>
                 </div>
                 <div class="post-meta">
                     <span>🔗 r/{post['subreddit']}</span>
                     <span>👤 {post['author']}</span>
                     <span>⬆️ {post['score']}</span>
                     <span>💬 {post['comments']}</span>
+                    <span style="color: {badge_color}; font-weight: bold;">{pitchability}</span>
+                </div>
+                <div class="score-breakdown" style="background: #f0f4f8; padding: 8px 12px; border-left: 3px solid {badge_color}; margin: 8px 0; font-size: 0.85em; color: #666;">
+                    {breakdown_str}
                 </div>
                 <div class="post-content">{post['content']}</div>
                 <div class="post-actions">
@@ -749,17 +870,39 @@ def saved():
     posts_html = ""
     if posts:
         for post in posts[:6]:
+            relevance = post.get('relevance', 0)
+            breakdown = post.get('score_breakdown', {})
+            pitchability = post.get('pitchability', 'LOW')
+
+            # Determine badge color and emoji based on pitchability
+            if pitchability == 'HIGH':
+                badge_color = '#10b981'  # Green
+                pitch_emoji = '🎯'
+            elif pitchability == 'MEDIUM':
+                badge_color = '#f59e0b'  # Amber
+                pitch_emoji = '⭐'
+            else:
+                badge_color = '#ef4444'  # Red
+                pitch_emoji = '📌'
+
+            # Build breakdown display
+            breakdown_str = f"Keyword: {breakdown.get('keyword', 0)} | Intent: {breakdown.get('intent', 0)} | Pillar: {breakdown.get('pillar', 0)} | Engagement: {breakdown.get('engagement', 0)}"
+
             posts_html += f"""
             <div class="post">
                 <div class="post-header">
                     <div class="post-title">{post['title']}</div>
-                    <div class="relevance-badge">💡 {post['relevance']}%</div>
+                    <div class="relevance-badge" style="background: {badge_color};">{pitch_emoji} {relevance}%</div>
                 </div>
                 <div class="post-meta">
                     <span>🔗 r/{post['subreddit']}</span>
                     <span>👤 {post['author']}</span>
                     <span>⬆️ {post['score']}</span>
                     <span>💬 {post['comments']}</span>
+                    <span style="color: {badge_color}; font-weight: bold;">{pitchability}</span>
+                </div>
+                <div class="score-breakdown" style="background: #f0f4f8; padding: 8px 12px; border-left: 3px solid {badge_color}; margin: 8px 0; font-size: 0.85em; color: #666;">
+                    {breakdown_str}
                 </div>
                 <div class="post-content">{post['content']}</div>
                 <div class="post-actions">
@@ -876,6 +1019,79 @@ def api_refresh():
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)})
+
+# ============== HUGINN INTEGRATION ENDPOINTS ==============
+
+@app.route('/api/huginn/save-post', methods=['POST'])
+def huginn_save_post():
+    """Endpoint for Huginn to POST new posts"""
+    try:
+        data = request.get_json()
+
+        # Validate required fields
+        required = ['id', 'title', 'author', 'subreddit', 'url']
+        if not all(field in data for field in required):
+            return jsonify({"success": False, "error": "Missing required fields"}), 400
+
+        # Create post object
+        post = {
+            'id': data['id'],
+            'title': data['title'],
+            'author': data['author'],
+            'subreddit': data['subreddit'],
+            'score': data.get('score', 0),
+            'comments': data.get('comments', 0),
+            'url': data['url'],
+            'created_utc': data.get('created_utc', time.time()),
+            'relevance': data.get('relevance', 60),
+            'content': data.get('content', '')
+        }
+
+        # Save post to saved_posts.json
+        save_post_data(post)
+
+        # Log to huginn_history.json
+        log_huginn_fetch(post['id'], 'auto-saved')
+
+        print(f"[HUGINN] Post saved: {post['id']} - {post['title'][:50]}", flush=True)
+
+        return jsonify({"success": True, "message": f"Post '{post['id']}' saved successfully"})
+    except Exception as e:
+        print(f"[ERROR] in huginn_save_post: {e}", flush=True)
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route('/api/huginn/history', methods=['GET'])
+def huginn_history():
+    """Get history of posts fetched by Huginn"""
+    try:
+        history = load_huginn_history()
+        total_saved = len(load_saved_posts())
+
+        return jsonify({
+            "success": True,
+            "history": history[-50:],  # Last 50 fetches
+            "total_auto_saved": total_saved,
+            "last_fetch": history[-1]['timestamp'] if history else None
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route('/api/huginn/config', methods=['GET'])
+def huginn_config():
+    """Get Huginn configuration"""
+    try:
+        config = {
+            "success": True,
+            "keywords": ZOP_KEYWORDS,
+            "subreddits": TARGET_SUBREDDITS,
+            "auto_save_threshold": 60,  # User's choice: 60% or higher
+            "update_frequency": "every 1 minute",
+            "notifications": "email",
+            "webhook_url": f"{request.host_url}api/huginn/save-post"
+        }
+        return jsonify(config)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
 
 @app.route('/top10')
 def top10():
